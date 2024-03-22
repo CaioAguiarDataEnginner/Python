@@ -1,0 +1,32 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+
+# Inicializar a sessão Spark
+spark = SparkSession.builder \
+    .appName("ETL Process") \
+    .getOrCreate()
+
+# Configurações do AWS
+aws_access_key_id = 'seu-access-key-id'
+aws_secret_access_key = 'seu-secret-access-key'
+bucket_name = 'nome-do-seu-bucket'
+input_folder = 'raw'
+output_folder = 'processed'
+input_file = 'seu-arquivo-de-entrada.csv'
+output_file = 'seu-arquivo-de-saida.csv'
+
+# Configurar as credenciais AWS
+spark.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.access.key", aws_access_key_id)
+spark.sparkContext._jsc.hadoopConfiguration().set("fs.s3a.secret.key", aws_secret_access_key)
+
+# Ler dados do S3
+input_data = spark.read.csv(f"s3a://{bucket_name}/{input_folder}/{input_file}", header=True)
+
+# Filtrar os dados para casas de alto padrão acima de 1 milhão de dólares
+filtered_data = input_data.filter((col("tipo_imovel") == "casa") & (col("preco") > 1000000))
+
+# Escrever dados processados de volta no S3
+filtered_data.write.csv(f"s3a://{bucket_name}/{output_folder}/{output_file}", header=True, mode="overwrite")
+
+# Encerrar a sessão Spark
+spark.stop()
