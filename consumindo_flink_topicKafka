@@ -1,0 +1,75 @@
+from pyflink.common.serialization import SimpleStringSchema
+from pyflink.common import WatermarkStrategy
+from pyflink.datastream import StreamExecutionEnvironment
+from pyflink.datastream.connectors import FlinkKafkaConsumer
+from pyflink.datastream.functions import ProcessFunction
+from pyflink.datastream.util import OutputTag
+from pyflink.table import StreamTableEnvironment
+from pyflink.table.descriptors import Schema, Kafka
+
+env = StreamExecutionEnvironment.get_execution_environment()
+env.set_parallelism(1)  # define o paralelismo
+
+t_env = StreamTableEnvironment.create(env)
+
+# Definindo as propriedades do Kafka
+props = {
+    'bootstrap.servers': 'localhost:9092',
+    'group.id': 'test-group'
+}
+
+# Definindo o esquema dos dados
+t_env.connect(
+    Kafka()
+    .version("universal")
+    .topic("test-topic")
+    .properties(props)
+    .start_from_latest()
+    .property("format", "json")
+    .property("json.fail-on-missing-field", "false")
+    .schema(Schema()
+            .field("id", "INT")
+            .field("name", "STRING")
+            .field("timestamp", "TIMESTAMP")
+            )
+).with_format(
+    Json()
+    .fail_on_missing_field(False)
+).with_schema(
+    Schema()
+    .field("id", "INT")
+    .field("name", "STRING")
+    .field("timestamp", "TIMESTAMP")
+).create_temporary_table("source")
+
+# Definindo o esquema da saída
+t_env.connect(
+    Kafka()
+    .version("universal")
+    .topic("output-topic")
+    .properties(props)
+    .start_from_latest()
+    .property("format", "json")
+    .property("json.fail-on-missing-field", "false")
+    .schema(Schema()
+            .field("id", "INT")
+            .field("name", "STRING")
+            .field("timestamp", "TIMESTAMP")
+            )
+).with_format(
+    Json()
+    .fail_on_missing_field(False)
+).with_schema(
+    Schema()
+    .field("id", "INT")
+    .field("name", "STRING")
+    .field("timestamp", "TIMESTAMP")
+).create_temporary_table("sink")
+
+# Definindo a consulta SQL
+t_env.from_path("source") \
+    .select("id, name, timestamp") \
+    .insert_into("sink")
+
+# Executando a consulta
+t_env.execute("kafka_streaming_example")
