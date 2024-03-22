@@ -1,0 +1,51 @@
+from airflow import DAG  # Importa a classe DAG do Airflow
+from airflow.operators.bash_operator import BashOperator  # Importa o operador BashOperator do Airflow
+from datetime import datetime, timedelta  # Importa datetime para lidar com datas
+from airflow.contrib.operators.spark_submit_operator import SparkSubmitOperator  # Importa o operador SparkSubmitOperator do Airflow
+
+# Define os argumentos padrão para a DAG
+default_args = {
+    'owner': 'airflow',  # Proprietário da DAG
+    'depends_on_past': False,  # Não depende do passado
+    'start_date': datetime(2024, 3, 22),  # Data de início da DAG
+    'email_on_failure': False,  # Não enviar email em caso de falha
+    'email_on_retry': False,  # Não enviar email em caso de retry
+    'retries': 1,  # Número de retentativas em caso de falha
+    'retry_delay': timedelta(minutes=5),  # Intervalo entre as retentativas
+}
+
+# Cria uma instância de DAG com os argumentos definidos anteriormente
+dag = DAG(
+    'etl_process',  # Nome da DAG
+    default_args=default_args,  # Argumentos padrão
+    description='ETL process with PySpark and Hive',  # Descrição da DAG
+    schedule_interval="@daily",  # Executar todos os dias à meia-noite
+)
+
+# Define o comando para executar o processo ETL usando PySpark
+spark_submit_cmd = "spark-submit --master yarn --deploy-mode client --executor-memory 1g " \
+                   "--driver-memory 1g --executor-cores 1 --num-executors 1 " \
+                   "/caminho/para/o/seu/script/etl_script.py"
+
+# Define o operador SparkSubmitOperator para executar o processo ETL
+spark_operator = SparkSubmitOperator(
+    task_id='spark_etl_task',  # ID da tarefa
+    application="/caminho/para/o/seu/arquivo/jar/spark_etl_script.py",  # Caminho para o script PySpark
+    conn_id="spark_default",  # ID da conexão com o Spark
+    dag=dag  # Associa a tarefa à DAG
+)
+
+# Define o comando para carregar os dados do Hive
+load_to_hive_cmd = "spark-submit --master yarn --deploy-mode client --executor-memory 1g " \
+                   "--driver-memory 1g --executor-cores 1 --num-executors 1 " \
+                   "/caminho/para/o/seu/script/load_to_hive.py"
+
+# Define o operador BashOperator para carregar os dados no Hive
+hive_operator = BashOperator(
+    task_id='load_to_hive_task',  # ID da tarefa
+    bash_command=load_to_hive_cmd,  # Comando Bash para carregar os dados no Hive
+    dag=dag  # Associa a tarefa à DAG
+)
+
+# Define a ordem de execução das tarefas
+spark_operator >> hive_operator  # Tarefa spark_operator precede a tarefa hive_operator na execução
